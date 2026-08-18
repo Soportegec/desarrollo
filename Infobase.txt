@@ -2878,12 +2878,10 @@ DECLARE
     v_abono_id bigint;
     v_pagada_final boolean;
 BEGIN
-    -- Bloquear fila para evitar condiciones de carrera
     SELECT * INTO v_factura FROM public.tfacturas WHERE id = p_factura_id FOR UPDATE;
     IF NOT FOUND THEN
         RETURN jsonb_build_object('status', 'error', 'message', 'Factura no encontrada');
     END IF;
-    -- Inicializar factura si es legacy (total = 0)
     IF COALESCE(v_factura.total, 0) = 0 THEN
         DECLARE
             v_sub_init numeric(12,2);
@@ -2893,7 +2891,7 @@ BEGIN
             v_punit_init numeric(12,2);
         BEGIN
             v_cant_init := COALESCE(
-                v_factura.cantidad_estudiantes_completaron,
+                NULLIF(v_factura.cantidad_estudiantes_completaron, 0),  -- ← CAMBIO
                 (SELECT COUNT(*)::integer FROM public.tcompletados_pruebas WHERE id_solicitud = v_factura.id_solicitud_origen),
                 0
             );
@@ -2905,79 +2903,38 @@ BEGIN
             v_sub_init := ROUND((COALESCE(v_factura.precio_base_at_emission, 0) + (v_cant_init * v_punit_init))::numeric, 2);
             v_tax_init := ROUND(((v_sub_init - COALESCE(v_factura.descuento, 0)) * (COALESCE(v_factura.impuesto_porcentaje_at_emission, 8) / 100.0))::numeric, 2);
             v_tot_init := ROUND(((v_sub_init - COALESCE(v_factura.descuento, 0)) + v_tax_init)::numeric, 2);
-            
-            UPDATE public.tfacturas
-            SET 
-                subtotal = v_sub_init,
-                total = v_tot_init,
-                impuesto = v_tax_init,
-                cantidad_estudiantes = v_cant_init,
-                precio_unitario_calculado = v_punit_init,
-                subtotal_real = v_sub_init,
-                total_real = v_tot_init,
-                impuesto_real = v_tax_init,
-                cantidad_estudiantes_real = v_cant_init,
-                precio_unitario_real = v_punit_init,
+            UPDATE public.tfacturas SET
+                subtotal = v_sub_init, total = v_tot_init, impuesto = v_tax_init,
+                cantidad_estudiantes = v_cant_init, precio_unitario_calculado = v_punit_init,
+                subtotal_real = v_sub_init, total_real = v_tot_init, impuesto_real = v_tax_init,
+                cantidad_estudiantes_real = v_cant_init, precio_unitario_real = v_punit_init,
                 updated_at = NOW()
             WHERE id = p_factura_id;
-            
-            -- Volver a leer la factura con los valores cargados
             SELECT * INTO v_factura FROM public.tfacturas WHERE id = p_factura_id;
         END;
     END IF;
-    -- Registrar instantánea previa
-    v_antes := jsonb_build_object(
-        'pagada', v_factura.pagada,
-        'fecha_pago', v_factura.fecha_pago,
-        'referencia_pago', v_factura.referencia_pago
-    );
-    -- Calcular sumatoria de abonos activos
-    SELECT COALESCE(SUM(monto), 0) INTO v_abonos_tot
-    FROM public.tabonos_factura
-    WHERE id_factura = p_factura_id AND estado = 'Aplicado';
-    -- Validar sobre-pago
+    v_antes := jsonb_build_object('pagada', v_factura.pagada, 'fecha_pago', v_factura.fecha_pago, 'referencia_pago', v_factura.referencia_pago);
+    SELECT COALESCE(SUM(monto), 0) INTO v_abonos_tot FROM public.tabonos_factura WHERE id_factura = p_factura_id AND estado = 'Aplicado';
     IF (v_abonos_tot + p_monto) > COALESCE(v_factura.total, 0) THEN
-        RETURN jsonb_build_object(
-            'status', 'error', 
-            'message', 'El monto supera el saldo pendiente. Saldo pendiente: ' || (COALESCE(v_factura.total, 0) - v_abonos_tot)
-        );
+        RETURN jsonb_build_object('status', 'error', 'message', 'El monto supera el saldo pendiente. Saldo pendiente: ' || (COALESCE(v_factura.total, 0) - v_abonos_tot));
     END IF;
-    -- Registrar abono
-    INSERT INTO public.tabonos_factura (
-        id_factura, monto, metodo_pago, referencia_pago, estado, registrado_por
-    ) VALUES (
-        p_factura_id, p_monto, p_metodo, p_referencia, 'Aplicado', p_usuario_id
-    ) RETURNING id INTO v_abono_id;
-    -- Recalcular saldo total de abonos activos
+    INSERT INTO public.tabonos_factura (id_factura, monto, metodo_pago, referencia_pago, estado, registrado_por)
+    VALUES (p_factura_id, p_monto, p_metodo, p_referencia, 'Aplicado', p_usuario_id)
+    RETURNING id INTO v_abono_id;
     v_abonos_tot := v_abonos_tot + p_monto;
     v_pagada_final := (v_abonos_tot >= COALESCE(v_factura.total, 0));
-    -- Actualizar estado de la factura legacy
-    UPDATE public.tfacturas
-    SET
+    UPDATE public.tfacturas SET
         pagada = v_pagada_final,
         fecha_pago = CASE WHEN v_pagada_final THEN CURRENT_DATE ELSE NULL END,
         referencia_pago = CASE WHEN v_pagada_final THEN p_referencia ELSE NULL END,
         updated_at = NOW()
     WHERE id = p_factura_id;
-    -- Registrar instantánea nueva
-    v_despues := jsonb_build_object(
-        'pagada', v_pagada_final,
-        'fecha_pago', CASE WHEN v_pagada_final THEN CURRENT_DATE ELSE NULL END,
-        'referencia_pago', CASE WHEN v_pagada_final THEN p_referencia ELSE NULL END
-    );
-    -- Registrar auditoría forense
-    INSERT INTO public.tauditoria_financiera (
-        id_factura, id_usuario_accion, tipo_evento, valores_anteriores, valores_nuevos, motivo
-    ) VALUES (
-        p_factura_id, p_usuario_id, 'REGISTRO_ABONO', v_antes, v_despues, p_motivo
-    );
-    RETURN jsonb_build_object(
-        'status', 'success',
-        'message', 'Abono registrado correctamente',
-        'abono_id', v_abono_id,
-        'pagada', v_pagada_final,
-        'saldo_restante', (COALESCE(v_factura.total, 0) - v_abonos_tot)
-    );
+    v_despues := jsonb_build_object('pagada', v_pagada_final, 'abono_id', v_abono_id, 'total_abonado', v_abonos_tot);
+    INSERT INTO public.tauditoria_financiera (id_factura, id_usuario_accion, tipo_evento, valores_anteriores, valores_nuevos, motivo)
+    VALUES (p_factura_id, p_usuario_id, 'ABONO', v_antes, v_despues, p_motivo);
+    RETURN jsonb_build_object('status', 'success', 'message', 'Abono registrado correctamente', 'abono_id', v_abono_id, 'pagada', v_pagada_final);
+EXCEPTION WHEN OTHERS THEN
+    RETURN jsonb_build_object('status', 'error', 'message', SQLERRM);
 END;
 $function$
 ",null

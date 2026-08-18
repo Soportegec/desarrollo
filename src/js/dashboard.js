@@ -34,21 +34,23 @@ function viewAdmin() {
 
     document.getElementById('pageTitle').innerText = "Control Maestro";
     document.getElementById('pageDesc').innerText = "Panel global de administración y configuración del sistema.";
-    
+
     document.getElementById('roleMenu').innerHTML = adminMenuHtml('dash');
 
     board.innerHTML = `
-        <div class="card span-2"><span class="stat-num" id="countDist">--</span><span class="stat-desc">Distribuidores</span></div>
-        <div class="card span-2"><span class="stat-num" id="countCol">--</span><span class="stat-desc">Colegios Totales</span></div>
-        <div class="card span-2"><span class="stat-num" id="countTestReal">--</span><span class="stat-desc">Resultados</span></div>
+        <div style="grid-column: 1 / -1; display:flex; gap:12px; overflow:hidden;">
+            <div class="card" style="flex:1; min-width:0;"><span class="stat-num" id="countDist">--</span><span class="stat-desc">Distribuidores</span></div>
+            <div class="card" style="flex:1; min-width:0;"><span class="stat-num" id="countCol">--</span><span class="stat-desc">Colegios Totales</span></div>
+            <div class="card" style="flex:1; min-width:0;"><span class="stat-num" id="countTestReal">--</span><span class="stat-desc">Resultados</span></div>
+        </div>
 
-        <div class="fact-action-card" onclick="viewAdminReports()" style="grid-column: span 6;">
+        <div class="fact-action-card" onclick="viewAdminReports()" style="grid-column: 1 / -1;">
             <div style="color: var(--fact-blue); font-size: 24px;"><i class="fa-solid fa-chart-line"></i></div>
             <h3 style="margin:0; font-size: 1.2rem;">Informes de Evaluación</h3>
             <p style="color: #64708c; font-size: 0.9rem; margin:0;">Accede a los informes individuales y grupales de todos los colegios.</p>
         </div>
         
-        <div class="card" style="grid-column: span 6;">
+        <div class="card" style="grid-column: 1 / -1;">
             <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; margin-bottom:20px;">
                 <h3 style="min-width:0;">Listado de Distribuidores</h3>
                 <button class="btn-main" style="width:auto; padding: 10px 25px; flex-shrink:0;" onclick="renderDistributorForm()">+ Nuevo Distribuidor</button>
@@ -56,7 +58,7 @@ function viewAdmin() {
             <div class="card-table-wrapper" id="distributorsTableContainer">Cargando...</div>
         </div>
     `;
-    
+
     loadAdminStats();
     loadDistributorsTable();
     refreshNotifBadges();
@@ -91,8 +93,8 @@ async function loadDistributorsTable() {
     const data = res.data?.data || res.data || [];
     const error = rpcError || (res?.status === 'error' ? res : null);
     const container = document.getElementById('distributorsTableContainer');
-    
-    if(error) return container.innerHTML = "Error al cargar distribuidores.";
+
+    if (error) return container.innerHTML = "Error al cargar distribuidores.";
 
     let html = `
         <table class="data-table">
@@ -120,8 +122,8 @@ function renderDistributorForm(id = null, nombre = "", identificacion = "", tipo
     const titulo = isEdit ? "Editar Distribuidor" : "Nuevo Distribuidor";
     document.getElementById('roleMenu').innerHTML = adminMenuHtml('dist');
     document.getElementById('pageTitle').innerText = titulo;
-    
-    const tdocOptions = ['C.C', 'TI', 'C.E', 'EXT', 'PPT'].map(opt => 
+
+    const tdocOptions = ['C.C', 'TI', 'C.E', 'EXT', 'PPT'].map(opt =>
         `<option value="${opt}" ${opt === tipodoc ? 'selected' : ''}>${opt}</option>`
     ).join('');
 
@@ -156,13 +158,13 @@ async function adminSaveDist(id) {
     const identificacion = document.getElementById('admId').value;
     const tipodoc = document.getElementById('admTipoDoc').value;
     const password = document.getElementById('admPass').value.trim();
-    if(!nombre.trim() || !identificacion.trim() || !tipodoc) return alert("Todos los campos son obligatorios.");
+    if (!nombre.trim() || !identificacion.trim() || !tipodoc) return alert("Todos los campos son obligatorios.");
 
     const isEdit = (id !== "null" && id !== null && id !== "");
     let error;
     let finalId = id;
 
-    if(isEdit) {
+    if (isEdit) {
         // REFUERZO SEGURIDAD: Usar RPC en lugar de update directo
         const { data: res, error: rpcError } = await _s.rpc('editar_usuario_sistema', {
             p_usuario_id: id,
@@ -175,14 +177,14 @@ async function adminSaveDist(id) {
     } else {
         // Lógica original usando RPC para creación segura
         const { data: res, error: rpcError } = await _s.rpc('crear_usuario_sistema', {
-            p_nombre: nombre, 
-            p_identificacion: identificacion, 
-            p_rol: 'distribuidor', 
+            p_nombre: nombre,
+            p_identificacion: identificacion,
+            p_rol: 'distribuidor',
             p_tipodoc: tipodoc,
             p_password: password || null,
             p_solicitante_id: sess.id
         });
-        if(rpcError || (res && res.status === 'error')) error = rpcError || res;
+        if (rpcError || (res && res.status === 'error')) error = rpcError || res;
     }
 
     if (error) {
@@ -193,7 +195,7 @@ async function adminSaveDist(id) {
 }
 
 async function deleteDistributor(id) {
-    if(!confirm("¿Eliminar distribuidor? Perderá acceso al sistema.")) return;
+    if (!confirm("¿Eliminar distribuidor? Perderá acceso al sistema.")) return;
     // REFUERZO SEGURIDAD: Eliminación via RPC con validación de rol
     const { data: res, error: rpcError } = await _s.rpc('eliminar_entidad_sistema', {
         p_tabla: 'tusuario',
@@ -201,7 +203,7 @@ async function deleteDistributor(id) {
         p_solicitante_id: sess.id
     });
 
-    if(rpcError || res.status === 'error') {
+    if (rpcError || res.status === 'error') {
         const _msg = rpcError?.message || res?.message || '';
         if (_msg.includes('tcolegios_id_dist_fkey')) {
             alert("No es posible eliminar este distribuidor porque tiene colegios y/o facturas asignadas.");
@@ -256,7 +258,7 @@ async function loadUserManagementTable() {
     const role = document.getElementById('filterUserRole').value;
     const term = document.getElementById('searchUserTerm').value.trim();
     const schoolTerm = document.getElementById('searchUserSchool').value.trim();
-    
+
     // REFUERZO SEGURIDAD: Consulta de usuarios via RPC con filtros en servidor
     const { data: res, error: rpcError } = await _s.rpc('obtener_usuarios_sistema_seguro', {
         p_admin_id: sess.id,
@@ -269,7 +271,7 @@ async function loadUserManagementTable() {
     const error = rpcError || (res?.status === 'error' ? res : null);
 
     const container = document.getElementById('userManagementContainer');
-    if(error) return container.innerHTML = "Error: " + error.message;
+    if (error) return container.innerHTML = "Error: " + error.message;
 
     // Mapeamos los datos para que la tabla sea legible (Copia literal de la lógica original)
     const formattedData = data.map(u => ({
@@ -305,7 +307,7 @@ async function loadUserManagementTable() {
                             </span>
                         </td>
                         <td><span class="badge" style="background:var(--secondary); color:white;">${u.rol}</span></td>
-                        <td><span class="badge ${u.estado==='Activo'?'badge-success':'badge-pending'}">${u.estado}</span></td>
+                        <td><span class="badge ${u.estado === 'Activo' ? 'badge-success' : 'badge-pending'}">${u.estado}</span></td>
                         <td style="text-align:right;">
                             <button title="Editar Perfil" class="btn-action" style="background:#e2e8f0; color:var(--primary); margin-right:5px;" onclick="renderUserEditForm('${u.id}')">
                                 <i class="fa-solid fa-user-pen"></i>
@@ -412,7 +414,7 @@ async function saveUserEdit(userId, rol) {
 }
 
 async function deleteSystemUser(id, name) {
-    if(!confirm(`¿Eliminar permanentemente a "${name}"?`)) return;
+    if (!confirm(`¿Eliminar permanentemente a "${name}"?`)) return;
     // REFUERZO SEGURIDAD: Eliminación via RPC con validación de rol
     const { data: res, error: rpcError } = await _s.rpc('eliminar_entidad_sistema', {
         p_tabla: 'tusuario',
@@ -420,7 +422,7 @@ async function deleteSystemUser(id, name) {
         p_solicitante_id: sess.id
     });
 
-    if(rpcError || res.status === 'error') alert("Error: " + (rpcError?.message || res?.message));
+    if (rpcError || res.status === 'error') alert("Error: " + (rpcError?.message || res?.message));
     else { alert("✅ Usuario eliminado."); loadUserManagementTable(); }
 }
 
@@ -428,7 +430,7 @@ async function viewTests() {
     document.getElementById('roleMenu').innerHTML = adminMenuHtml('tests');
     document.getElementById('pageTitle').innerText = "Motor de Pruebas";
     document.getElementById('pageDesc').innerText = "Crea y configura el contenido de los exámenes.";
-    
+
     document.getElementById('dynamicBoard').innerHTML = `
         <div class="card span-6">
             <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; margin-bottom:20px;">
@@ -445,7 +447,7 @@ async function viewTests() {
 
     if (error || res?.status === 'error') return alert("Error al cargar pruebas.");
     const data = res.data?.data || res.data || [];
-    
+
     let html = `
         <table class="data-table">
             <thead><tr><th>ID</th><th>Nombre</th><th>Tipo Respuesta</th><th>Lógica Cálculo</th><th>Preguntas</th><th>Acciones</th></tr></thead>
@@ -552,7 +554,7 @@ async function saveTest(id) {
     const tipo_respuesta = document.getElementById('testType').value;
     const logica_calculo = document.getElementById('testLogic').value;
     const tipo_informe = document.getElementById('tipoInforme').value;
-    if(!nombre || !tipo_respuesta || !logica_calculo || !tipo_informe) {
+    if (!nombre || !tipo_respuesta || !logica_calculo || !tipo_informe) {
         return alert("Todos los campos son obligatorios.");
     }
 
@@ -574,12 +576,12 @@ async function saveTest(id) {
         p_popup_url: popup_url
     });
 
-    if(error) alert("Error: " + error.message);
+    if (error) alert("Error: " + error.message);
     else viewTests();
 }
 
 async function deleteTest(id) {
-    if(!confirm("¿Eliminar prueba? Se borrarán sus preguntas asociadas.")) return;
+    if (!confirm("¿Eliminar prueba? Se borrarán sus preguntas asociadas.")) return;
     // REFUERZO SEGURIDAD: Eliminación via RPC (El servidor debe manejar la integridad)
     const { data: res, error: rpcError } = await _s.rpc('eliminar_entidad_sistema', {
         p_tabla: 'tpruebas',
@@ -587,7 +589,7 @@ async function deleteTest(id) {
         p_solicitante_id: sess.id
     });
 
-    if(rpcError || res.status === 'error') alert("Error: " + (rpcError?.message || res?.message));
+    if (rpcError || res.status === 'error') alert("Error: " + (rpcError?.message || res?.message));
     else viewTests();
 }
 
@@ -595,7 +597,7 @@ async function manageQuestions(testId, testName) {
     document.getElementById('roleMenu').innerHTML = adminMenuHtml('tests');
     document.getElementById('pageTitle').innerText = "Configuración: " + testName;
     document.getElementById('dynamicBoard').innerHTML = `<div class="card span-6"><div class="card-table-wrapper" id="qListContainer">Cargando...</div></div>`;
-    
+
     // REFUERZO SEGURIDAD: Usar RPC para obtener preguntas de forma segura bypassando RLS
     const { data: res, error: rpcError } = await _s.rpc('obtener_preguntas_prueba_seguro', {
         p_prueba_id: String(testId),
@@ -609,7 +611,7 @@ async function manageQuestions(testId, testName) {
         document.getElementById('qListContainer').innerHTML = "Error: " + (error.message || "No tienes permiso para ver estas preguntas.");
         return;
     }
-    
+
     let html = `
         <button class="btn-main" style="width:auto; padding:10px 20px; margin-bottom:20px;" onclick="viewTests()"><i class="fa-solid fa-arrow-left"></i> Volver</button>
         <table class="data-table">
@@ -631,7 +633,7 @@ async function editQuestion(qId, testId) {
     });
 
     if (error || res?.status === 'error') return alert("Error al cargar datos de la pregunta.");
-    
+
     const q = res.data.find(item => item.id === qId);
     if (!q) return alert("No se encontró la pregunta.");
 
@@ -694,10 +696,10 @@ async function processCSV(testId) {
             const separator = firstLine.includes(';') ? ';' : ',';
             // Limpiar BOM (caracteres invisibles de Excel) y normalizar a minúsculas
             const headers = firstLine.replace(/^\uFEFF/, '').split(separator).map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''));
-            
+
             const required = ['num_pregunta', 'area', 'enunciado', 'opt1', 'opt2'];
             const missing = required.filter(r => !headers.includes(r));
-            
+
             if (missing.length > 0) {
                 throw new Error(`La plantilla CSV es inválida o ha sido modificada. Faltan columnas obligatorias: ${missing.join(', ')}`);
             }
@@ -747,7 +749,7 @@ async function processCSV(testId) {
 function viewDist() {
     document.getElementById('pageTitle').innerText = "Panel Operativo";
     document.getElementById('pageDesc').innerText = "Gestión comercial y vinculación de instituciones.";
-    
+
     document.getElementById('roleMenu').innerHTML = distMenuHtml('dash');
 
     document.getElementById('dynamicBoard').innerHTML = `
@@ -771,7 +773,7 @@ async function loadDistStats() {
     const { data: res, error } = await _s.rpc('obtener_estadisticas_distribuidor_seguras', {
         p_dist_id: sess.id
     });
-    
+
     if (error || res?.status === 'error') return;
     const s = res?.data?.data || res?.data || res || {};
     document.getElementById('schoolCount').innerText = (s.colegios || 0).toString().padStart(2, '0');
@@ -787,7 +789,7 @@ async function loadSchools() {
 
     const data = res?.data?.data || res?.data || [];
     const error = rpcError || (res?.status === 'error' ? res : null);
-    
+
     if (error) {
         container.innerHTML = "Error al cargar colegios.";
         refreshNotifBadges();
@@ -841,7 +843,7 @@ async function openSchoolForm(schoolData = null) {
     }
     document.getElementById('pageTitle').innerText = isEdit ? "Editar Institución" : "Vincular Institución";
 
-    const tdocOptions = ['C.C', 'TI', 'C.E', 'EXT', 'PPT'].map(opt => 
+    const tdocOptions = ['C.C', 'TI', 'C.E', 'EXT', 'PPT'].map(opt =>
         `<option value="${opt}" ${opt === rectorInfo.tipodoc ? 'selected' : ''}>${opt}</option>`
     ).join('');
 
@@ -875,8 +877,8 @@ async function openSchoolForm(schoolData = null) {
                 <button class="btn-main" style="background:var(--secondary);" onclick="backToSchoolList()">Cancelar</button>
             </div>
         </div>`;
-    
-    if(isEdit) document.getElementById('fDep').value = schoolData.id_departamento;
+
+    if (isEdit) document.getElementById('fDep').value = schoolData.id_departamento;
 }
 
 async function editSchool(id) {
@@ -907,7 +909,7 @@ async function saveSchool() {
     const rNom = document.getElementById('fRectorNom').value.trim();
     const rIdNum = document.getElementById('fRectorId').value.trim();
 
-    if(!payload.p_nombre || !payload.p_dane) return alert("Nombre y DANE son obligatorios.");
+    if (!payload.p_nombre || !payload.p_dane) return alert("Nombre y DANE son obligatorios.");
 
     // REFUERZO SEGURIDAD: Gestión transaccional via RPC (Crea o Edita Colegio + Rector)
     const { data: res, error: rpcError } = await _s.rpc('gestionar_colegio_sistema', {
@@ -988,7 +990,7 @@ async function deleteSchool(id) {
     if (rectorId) {
         const { data: rRector, error: errRector } = await _s.rpc('eliminar_rector_colegio', {
             p_colegio_id: parseInt(id),
-            p_rector_id:  rectorId,
+            p_rector_id: rectorId,
             p_usuario_id: sess.id
         });
         if (errRector || rRector?.status === 'error') return alert("Error al eliminar rector: " + (errRector?.message || rRector?.message));
@@ -1020,7 +1022,7 @@ async function renderRectorForm(schoolId, schoolName, rectorId = '') {
         if (!recError && res?.status === 'success') rectorData = res.data;
     }
 
-    const tdocOptions = ['C.C', 'TI', 'C.E', 'EXT', 'PPT'].map(opt => 
+    const tdocOptions = ['C.C', 'TI', 'C.E', 'EXT', 'PPT'].map(opt =>
         `<option value="${opt}" ${opt === rectorData.tipodoc ? 'selected' : ''}>${opt}</option>`
     ).join('');
 
@@ -1068,56 +1070,73 @@ async function saveRectorForSchool() {
     backToSchoolList();
 }
 
-function viewAreasVocacionales() {
+async function viewAreasVocacionales() {
     document.getElementById('roleMenu').innerHTML = adminMenuHtml('areas');
     document.getElementById('pageTitle').innerText = "Gestión de Áreas Vocacionales";
     document.getElementById('pageDesc').innerText = "Edita descripciones y carreras sugeridas para cada área.";
-    
+
     document.getElementById('dynamicBoard').innerHTML = `
         <div class="card span-6" style="max-width:1000px; margin:0 auto;">
             <h3>Áreas Vocacionales</h3>
             <p style="color:var(--secondary); font-size:0.9rem; margin-bottom:20px;">Actualiza la información de cada área para personalizar los resultados de los estudiantes.</p>
-            <div id="areasContainer" style="display:grid; gap:20px;"></div>
+            <div id="areasContainer" style="display:grid; gap:20px;">Cargando áreas...</div>
         </div>
     `;
-    
-    renderAreasVocacionales();
+
+    const { data: res, error } = await _s.rpc('obtener_areas_vocacionales_por_codigos', {
+        p_codigos: ['C','H','A','S','I','D','E']
+    });
+    const dbAreas = res?.data || [];
+    renderAreasVocacionales(dbAreas);
 }
 
-function renderAreasVocacionales() {
+function renderAreasVocacionales(dbAreas) {
     const container = document.getElementById('areasContainer');
     if (!container) return;
-    
-    container.innerHTML = Object.entries(AREAS_VOCACIONALES).map(([area, data], idx) => `
+
+    const AREA_CODE_MAP = {'C':'Administrativas y Contables','H':'Humanidades y Ciencias Sociales','A':'Artes y Creatividad','S':'Ciencias de la Salud','I':'Ingenierías y Computación','D':'Defensa y Seguridad','E':'Exactas y Agrarias'};
+    const dbMap = Object.fromEntries((dbAreas || []).map(i => [i.codigo_area?.trim(), i]));
+    const areas = Object.entries(AREA_CODE_MAP).map(([code, nombre]) => {
+        const db = dbMap[code];
+        const fallback = AREAS_VOCACIONALES[nombre] || {};
+        return {
+            code, nombre,
+            descripcion: db?.descripcion   || fallback.descripcion   || '',
+            carreras:    Array.isArray(db?.carreras) ? db.carreras : (fallback.carreras || []),
+            id:          db?.id ?? null
+        };
+    });
+
+    container.innerHTML = areas.map((area, idx) => `
         <div style="border:2px solid var(--light-border); border-radius:12px; padding:20px; background:#fafafa; transition:all 0.3s;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                <h4 style="color:var(--primary); margin:0; flex:1;">${area}</h4>
+                <h4 style="color:var(--primary); margin:0; flex:1;">${area.nombre} <span style="font-size:0.75rem; color:var(--secondary); font-weight:400;">[${area.code}]${area.id ? '' : ' — sin datos en BD'}</span></h4>
                 <button onclick="toggleEditArea(${idx})" style="background:var(--secondary); color:white; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; font-size:0.9rem; font-weight:600;">
                     <i class="fa-solid fa-edit"></i> Editar
                 </button>
             </div>
             <div id="view-area-${idx}" style="display:block;">
                 <div style="background:white; padding:15px; border-radius:8px; margin-bottom:15px;">
-                    <p style="color:#555; line-height:1.8; font-size:14px; margin:0;">${data.descripcion}</p>
+                    <p style="color:#555; line-height:1.8; font-size:14px; margin:0;">${area.descripcion || '<em style="color:var(--secondary);">Sin descripción</em>'}</p>
                 </div>
                 <div>
                     <strong style="color:var(--primary); display:block; margin-bottom:10px;">Carreras Sugeridas:</strong>
                     <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px;">
-                        ${data.carreras.map(c => `<span style="background:var(--light-bg); padding:8px 12px; border-radius:6px; text-align:center; font-size:13px;">${c}</span>`).join('')}
+                        ${area.carreras.map(c => `<span style="background:var(--light-bg); padding:8px 12px; border-radius:6px; text-align:center; font-size:13px;">${c}</span>`).join('')}
                     </div>
                 </div>
             </div>
             <div id="edit-area-${idx}" style="display:none;">
                 <div style="margin-bottom:15px;">
                     <label style="display:block; margin-bottom:8px; font-weight:600; color:var(--primary);">Descripción:</label>
-                    <textarea id="desc-${idx}" style="width:100%; height:100px; border:1.5px solid #ddd; border-radius:8px; padding:12px; font-family:inherit; font-size:14px; resize:vertical;">${data.descripcion}</textarea>
+                    <textarea id="desc-${idx}" style="width:100%; height:100px; border:1.5px solid #ddd; border-radius:8px; padding:12px; font-family:inherit; font-size:14px; resize:vertical;">${area.descripcion}</textarea>
                 </div>
                 <div style="margin-bottom:15px;">
                     <label style="display:block; margin-bottom:8px; font-weight:600; color:var(--primary);">Carreras (una por línea):</label>
-                    <textarea id="carr-${idx}" style="width:100%; height:120px; border:1.5px solid #ddd; border-radius:8px; padding:12px; font-family:mono; font-size:13px; resize:vertical;">${data.carreras.join('\n')}</textarea>
+                    <textarea id="carr-${idx}" style="width:100%; height:120px; border:1.5px solid #ddd; border-radius:8px; padding:12px; font-family:mono; font-size:13px; resize:vertical;">${area.carreras.join('\n')}</textarea>
                 </div>
                 <div style="display:flex; gap:10px;">
-                    <button onclick="guardarArea(${idx}, '${area}')" style="background:var(--success); color:white; border:none; padding:10px 20px; border-radius:6px; cursor:pointer; font-weight:600; flex:1;">
+                    <button onclick="guardarArea(${idx}, '${area.code}', '${area.nombre}', ${area.id ?? 'null'})" style="background:var(--success); color:white; border:none; padding:10px 20px; border-radius:6px; cursor:pointer; font-weight:600; flex:1;">
                         <i class="fa-solid fa-check"></i> Guardar
                     </button>
                     <button onclick="toggleEditArea(${idx})" style="background:#999; color:white; border:none; padding:10px 20px; border-radius:6px; cursor:pointer; font-weight:600; flex:1;">
@@ -1138,24 +1157,33 @@ function toggleEditArea(idx) {
     editEl.style.display = isShowing ? 'block' : 'none';
 }
 
-function guardarArea(idx, areaNombre) {
+async function guardarArea(idx, areaCode, areaNombre, areaId) {
     const desc = document.getElementById(`desc-${idx}`).value.trim();
     const carrText = document.getElementById(`carr-${idx}`).value.trim();
-    
+
     if (!desc) return alert('La descripción no puede estar vacía.');
     if (!carrText) return alert('Debe haber al menos una carrera.');
-    
+
     const carreras = carrText.split('\n').map(c => c.trim()).filter(c => c);
-    
-    AREAS_VOCACIONALES[areaNombre] = {
+
+    const payload = {
+        nombre_area: areaNombre,
+        codigo_area: areaCode,
         descripcion: desc,
         carreras: carreras
     };
-    
-    localStorage.setItem('AREAS_VOCACIONALES', JSON.stringify(AREAS_VOCACIONALES));
-    
+
+    let result;
+    if (areaId && areaId !== 'null') {
+        result = await _s.from('tareas_vocacionales').update(payload).eq('id', areaId);
+    } else {
+        result = await _s.from('tareas_vocacionales').insert(payload);
+    }
+
+    if (result.error) return alert('Error al guardar: ' + result.error.message);
+
     alert('✅ Área actualizada correctamente. Los cambios se reflejarán en los próximos resultados.');
-    renderAreasVocacionales();
+    viewAreasVocacionales();
 }
 
 async function viewSolicitudesAplicacion() {
@@ -1168,7 +1196,7 @@ async function viewSolicitudesAplicacion() {
             <p style="color:var(--secondary); font-size:0.9rem; margin-bottom:16px;">Las solicitudes en estado pendiente requieren tu decisión.</p>
             <div class="card-table-wrapper" id="solicitudesContainer">Cargando...</div>
         </div>`;
-    
+
     // REFUERZO SEGURIDAD: Usar RPC para obtener solicitudes de aplicación para el admin
     const { data: res, error: rpcError } = await _s.rpc('obtener_solicitudes_admin_seguro', {
         p_admin_id: sess.id
@@ -1206,24 +1234,24 @@ async function viewSolicitudesAplicacion() {
             </thead>
             <tbody>
                 ${data.map(s => {
-                    const pend = s.estado === 'pendiente';
-                    const badge = 
-                        s.estado === 'pendiente' ? 'badge-pending' : 
-                        s.estado === 'aprobada' ? 'badge-success' : 
-                        s.estado === 'finalizada' ? 'badge-finalized' : 
+        const pend = s.estado === 'pendiente';
+        const badge =
+            s.estado === 'pendiente' ? 'badge-pending' :
+                s.estado === 'aprobada' ? 'badge-success' :
+                    s.estado === 'finalizada' ? 'badge-finalized' :
                         'badge';
-                        
-                    const fi = s.fecha_inicio || '';
-                    const ff = s.fecha_fin || '';
-                    const hi = s.hora_inicio ? s.hora_inicio.substring(0, 5) : '';
-                    const hf = s.hora_fin ? s.hora_fin.substring(0, 5) : '';
-                    
-                    let ventana = `${fi} → ${ff}`;
-                    if (hi && hf) {
-                        ventana += `<br><span style="color:var(--secondary); font-size:0.75rem;"><i class="fa-regular fa-clock"></i> ${hi} a ${hf}</span>`;
-                    }
 
-                    return ` 
+        const fi = s.fecha_inicio || '';
+        const ff = s.fecha_fin || '';
+        const hi = s.hora_inicio ? s.hora_inicio.substring(0, 5) : '';
+        const hf = s.hora_fin ? s.hora_fin.substring(0, 5) : '';
+
+        let ventana = `${fi} → ${ff}`;
+        if (hi && hf) {
+            ventana += `<br><span style="color:var(--secondary); font-size:0.75rem;"><i class="fa-regular fa-clock"></i> ${hi} a ${hf}</span>`;
+        }
+
+        return ` 
                     <tr>
                         <td style="font-size:0.8rem;">${s.created_at ? new Date(s.created_at).toLocaleString() : '—'}</td>
                         <td><strong>${s.colegio_nombre || 'N/A'}</strong></td>
@@ -1242,7 +1270,7 @@ async function viewSolicitudesAplicacion() {
                             </button>
                         </td>
                     </tr>`;
-                }).join('')}
+    }).join('')}
             </tbody>
         </table>`;
     localStorage.setItem(notifKey('admin_sol_seen'), new Date().toISOString());
@@ -1325,12 +1353,12 @@ async function renderEditSolicitudForm(id) {
 
                 <div class="input-box" style="margin:0;">
                     <label>Hora de Inicio <span style="color:var(--secondary); font-size:0.8rem;">(opcional — franja horaria)</span></label>
-                    <input type="time" id="admEditHini" value="${s.hora_inicio ? s.hora_inicio.substring(0,5) : ''}">
+                    <input type="time" id="admEditHini" value="${s.hora_inicio ? s.hora_inicio.substring(0, 5) : ''}">
                 </div>
 
                 <div class="input-box" style="margin:0;">
                     <label>Hora de Fin <span style="color:var(--secondary); font-size:0.8rem;">(opcional)</span></label>
-                    <input type="time" id="admEditHfin" value="${s.hora_fin ? s.hora_fin.substring(0,5) : ''}">
+                    <input type="time" id="admEditHfin" value="${s.hora_fin ? s.hora_fin.substring(0, 5) : ''}">
                 </div>
 
                 <div class="input-box" style="grid-column: 1 / -1; margin:0;">
@@ -1351,12 +1379,12 @@ async function renderEditSolicitudForm(id) {
  * Ejecuta la actualización administrativa segura
  */
 async function saveAdministrativeSolicitudEdit(id) {
-    const estado       = document.getElementById('admEditEstado').value;
+    const estado = document.getElementById('admEditEstado').value;
     const fecha_inicio = document.getElementById('admEditFini').value;
-    const fecha_fin    = document.getElementById('admEditFfin').value;
-    const hora_inicio  = document.getElementById('admEditHini').value || null;
-    const hora_fin     = document.getElementById('admEditHfin').value || null;
-    const motivo       = document.getElementById('admEditNotas').value.trim();
+    const fecha_fin = document.getElementById('admEditFfin').value;
+    const hora_inicio = document.getElementById('admEditHini').value || null;
+    const hora_fin = document.getElementById('admEditHfin').value || null;
+    const motivo = document.getElementById('admEditNotas').value.trim();
 
     if (!fecha_inicio || !fecha_fin) return alert("Las fechas son obligatorias.");
     if (fecha_fin < fecha_inicio) return alert("La fecha de finalización no puede ser anterior a la de inicio.");
@@ -1370,14 +1398,14 @@ async function saveAdministrativeSolicitudEdit(id) {
     }
 
     const { data: res, error } = await _s.rpc('gestionar_solicitud_aplicacion_segura', {
-        p_solicitud_id:   String(id),
-        p_estado:         estado,
-        p_fecha_inicio:   fecha_inicio || null,
-        p_fecha_fin:      fecha_fin    || null,
-        p_hora_inicio:    hora_inicio,
-        p_hora_fin:       hora_fin,
+        p_solicitud_id: String(id),
+        p_estado: estado,
+        p_fecha_inicio: fecha_inicio || null,
+        p_fecha_fin: fecha_fin || null,
+        p_hora_inicio: hora_inicio,
+        p_hora_fin: hora_fin,
         p_motivo_rechazo: motivo && motivo.trim() !== "" ? motivo.trim() : null,
-        p_admin_id:       String(sess.id)
+        p_admin_id: String(sess.id)
     });
 
     if (error) return alert("Error al actualizar: " + error.message);
@@ -1390,7 +1418,7 @@ async function viewGlobalSchools() {
     document.getElementById('roleMenu').innerHTML = adminMenuHtml('schools');
     document.getElementById('pageTitle').innerText = "Gestión Global de Colegios";
     document.getElementById('pageDesc').innerText = "Supervisión de todas las instituciones registradas en la plataforma.";
-    
+
     document.getElementById('dynamicBoard').innerHTML = `
         <div class="card span-6">
             <h3>Instituciones en el Sistema</h3>
@@ -1460,10 +1488,10 @@ async function toggleResultadosVisibility() {
 
     if (error) {
         // Manejo elegante: Si las columnas no existen aún en la API, mostramos un mensaje amigable
-        const msg = error.message.includes('not exist') 
+        const msg = error.message.includes('not exist')
             ? "La configuración de fechas está siendo sincronizada. Por favor, recarga la página en un momento o contacta a soporte."
             : error.message;
-            
+
         document.getElementById('dynamicBoard').innerHTML = `
             <div class="card span-6">
                 <h3><i class="fa-solid fa-triangle-exclamation" style="color:var(--fact-orange);"></i> Configuración pendiente</h3>
@@ -1714,14 +1742,14 @@ async function descargarExcelColegio(schoolId, schoolName) {
 
         // Formato compatible con la plantilla de carga masiva
         const datosExcel = data.map(est => ({
-            grado:          est.grado_nombre    || '',
-            grupo:          est.grupo_nombre    || '',
-            nombre:         est.nombre          || '',
-            identificacion: est.identificacion  || '',
-            tipodoc:        est.tipodoc         || ''
+            grado: est.grado_nombre || '',
+            grupo: est.grupo_nombre || '',
+            nombre: est.nombre || '',
+            identificacion: est.identificacion || '',
+            tipodoc: est.tipodoc || ''
         }));
 
-        const hoja  = XLSX.utils.json_to_sheet(datosExcel);
+        const hoja = XLSX.utils.json_to_sheet(datosExcel);
         const libro = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(libro, hoja, 'Estudiantes_Activos');
 
@@ -1786,10 +1814,10 @@ async function loadStudents(groupId) {
     if (!data.length) { container.innerHTML = "<p>Sin estudiantes.</p>"; return; }
     container.innerHTML = `<table class="student-table"><thead><tr><th>Tipo</th><th>Documento</th><th>Nombre</th><th style="text-align:right;">Acciones</th></tr></thead>
         <tbody>${data.map(est => {
-            const uid = est.tusuario?.id || est.id;
-            const iden = est.tusuario?.identificacion || 'S/N';
-            const tdoc = est.tusuario?.tipodoc || est.tipodoc || '—';
-            return `<tr id="row-${est.id}">
+        const uid = est.tusuario?.id || est.id;
+        const iden = est.tusuario?.identificacion || 'S/N';
+        const tdoc = est.tusuario?.tipodoc || est.tipodoc || '—';
+        return `<tr id="row-${est.id}">
                 <td id="tdoc-cell-${est.id}"><span class="badge" style="background:#e2e8f0; color:#475569;">${tdoc}</span></td>
                 <td id="id-cell-${est.id}"><span class="badge badge-pending" style="font-family:monospace;">${iden}</span></td>
                 <td id="name-cell-${est.id}"><strong>${est.nombre}</strong></td>
@@ -1799,7 +1827,7 @@ async function loadStudents(groupId) {
                     <button class="btn-action" style="background:#fee2e2; color:#b91c1c;" onclick="deleteStudent('${est.id}')"><i class="fa-solid fa-trash"></i></button>
                 </td>
             </tr>`;
-        }).join('')}</tbody></table>`;
+    }).join('')}</tbody></table>`;
 }
 
 function showAddStudentForm() {
@@ -1809,8 +1837,8 @@ function showAddStudentForm() {
 
 async function saveNewStudent() {
     const tipodoc = document.getElementById('newEstTipoDoc').value; const iden = document.getElementById('newEstId').value.trim(); const nom = document.getElementById('newEstNombre').value.trim();
-    if(!iden || !nom) return alert("Completa campos.");
-    
+    if (!iden || !nom) return alert("Completa campos.");
+
     // REFUERZO SEGURIDAD: Creación via RPC
     const { data: res, error } = await _s.rpc('gestionar_estudiante_sistema', {
         p_nombre: nom,
@@ -1831,7 +1859,7 @@ async function saveNewStudent() {
 
 async function deleteStudent(studentId) {
     if (!confirm("¿Esta seguro que se desea eliminar este estudiante?")) return;
-    
+
     // REFUERZO SEGURIDAD: Eliminación via RPC
     const { data: res, error: rpcError } = await _s.rpc('eliminar_entidad_sistema', {
         p_tabla: 'testudiantes',
@@ -1839,15 +1867,13 @@ async function deleteStudent(studentId) {
         p_solicitante_id: sess.id
     });
 
-    if(rpcError || res.status === 'error') alert("Error: " + (rpcError?.message || res?.message));
+    if (rpcError || res.status === 'error') alert("Error: " + (rpcError?.message || res?.message));
     else loadStudents(selectedGroupId);
 }
 
 function toggleEditStudent(sid, uid, tdoc) {
-    // Capturar el nombre del colegio antes de navegar al formulario
-    const schoolName = document.getElementById('pageTitle').innerText;
-    // Al guardar o cancelar, volver a la estructura del colegio actual
-    _userEditReturnFn = () => viewSchoolStructure(selectedSchoolId, schoolName);
+    // Use global selectedSchoolName for cancel return
+    _userEditReturnFn = () => viewSchoolStructure(selectedSchoolId, selectedSchoolName);
     renderUserEditForm(uid);
 }
 
@@ -1857,7 +1883,7 @@ async function saveEditStudent(sid, uid) {
     const nTdoc = document.getElementById(`edit-tdoc-${sid}`).value;
 
     if (!nIden || !nNom) return alert("Por favor, completa todos los campos.");
-    
+
     // REFUERZO SEGURIDAD: Edición via RPC
     const { data: res, error } = await _s.rpc('gestionar_estudiante_sistema', {
         p_estudiante_id: sid,
@@ -1891,20 +1917,20 @@ async function darProrrogaEstudiante(sid, name) {
         p_fecha_limite: fechaLimite.toISOString(),
         p_usuario_id: sess.id
     });
-    
+
     if (error) alert("Error al dar prórroga: " + error.message);
     else alert(`✅ Prórroga activada para ${name} hasta el ${fechaLimite.toLocaleString()}`);
 }
 
 async function viewLoadStudents(schoolId, schoolName) {
     // Guardar en globales para que los botones internos puedan usarlos sin pasar args inline
-    selectedSchoolId   = schoolId;
+    selectedSchoolId = schoolId;
     selectedSchoolName = schoolName;
 
     const board = document.getElementById('dynamicBoard');
     board.classList.add('bento-grid');
     document.getElementById('pageTitle').innerText = "Carga Masiva de Estudiantes";
-    document.getElementById('pageDesc').innerText  = "Institución: " + schoolName;
+    document.getElementById('pageDesc').innerText = "Institución: " + schoolName;
     board.innerHTML = `
         <div class="card span-4">
             <h3>Subir Base de Datos Única</h3>
@@ -1935,14 +1961,14 @@ function volverAEstructura() {
 
 // Cancela el panel de depuración y vuelve a la pantalla de carga masiva limpia
 function cancelarCargaMasiva() {
-    jsonOriginal      = [];
+    jsonOriginal = [];
     cambiosPendientes = [];
     viewLoadStudents(selectedSchoolId, selectedSchoolName);
 }
 
 async function processExcelInteligente(event, schoolId) {
-    const file = event.target.files[0]; 
-    if(!file) return;
+    const file = event.target.files[0];
+    if (!file) return;
 
     const status = document.getElementById('statusCarga');
     status.style.display = "block";
@@ -1956,7 +1982,7 @@ async function processExcelInteligente(event, schoolId) {
             const data = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, { type: 'array' });
             const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-            
+
             // Obtener el JSON crudo
             let json = XLSX.utils.sheet_to_json(worksheet);
             if (json.length === 0) throw new Error("El archivo está vacío.");
@@ -1968,7 +1994,7 @@ async function processExcelInteligente(event, schoolId) {
             const headers = Object.keys(json[0]);
             const required = ['grado', 'grupo', 'nombre', 'identificacion', 'tipodoc'];
             const missing = required.filter(h => !headers.some(actual => actual.toLowerCase() === h));
-            
+
             if (missing.length > 0) {
                 throw new Error(`La plantilla ha sido modificada. Faltan las columnas: ${missing.join(', ')}`);
             }
@@ -1978,12 +2004,12 @@ async function processExcelInteligente(event, schoolId) {
                 const newRow = {};
                 // Convertimos todas las llaves a minúsculas para evitar "Nombre" vs "nombre"
                 Object.keys(row).forEach(k => newRow[k.toLowerCase()] = row[k]);
-                
+
                 // Limpiamos la identificación de puntos, comas y espacios
                 if (newRow.identificacion) {
                     newRow.identificacion = String(newRow.identificacion).replace(/[.,\s]/g, '');
                 }
-                
+
                 return newRow;
             });
 
@@ -2051,7 +2077,7 @@ function renderPanelDepuracion(originalJson, conflictos, schoolId) {
             const orig = originalJson.find(r => String(r.identificacion) === key) || c;
             mapaConflictos.set(key, { orig, motivos: [] });
         }
-        const esError  = c.colegio_actual && c.colegio_actual.startsWith('ERROR');
+        const esError = c.colegio_actual && c.colegio_actual.startsWith('ERROR');
         const txtMotivo = esError
             ? c.colegio_actual.replace('ERROR: ', '')
             : `Ya existe en: ${c.colegio_actual || 'Este mismo colegio'}`;
@@ -2060,25 +2086,25 @@ function renderPanelDepuracion(originalJson, conflictos, schoolId) {
 
     const totalErrores = mapaConflictos.size;                          // filas únicas
     const IDsConflictivos = new Set(mapaConflictos.keys());
-    const totalValidos    = originalJson.length - IDsConflictivos.size;
-    const datosLimpios    = originalJson.filter(row => !IDsConflictivos.has(String(row.identificacion)));
+    const totalValidos = originalJson.length - IDsConflictivos.size;
+    const datosLimpios = originalJson.filter(row => !IDsConflictivos.has(String(row.identificacion)));
 
     const TIPODOC_OPTS = ['C.C', 'TI', 'C.E', 'EXT', 'PPT'];
-    const BORDE_ERROR  = '2px solid #ef4444';
+    const BORDE_ERROR = '2px solid #ef4444';
     const BORDE_NORMAL = '1px solid #cbd5e1';
 
     // ── 2. Construir filas ────────────────────────────────────────────────
     const filasHtml = Array.from(mapaConflictos.values()).map(({ orig, motivos }) => {
 
         // Determinar qué campos tienen error según los motivos acumulados
-        const todosTextos  = motivos.map(m => m.texto.toLowerCase()).join(' ');
-        const errorGrado   = todosTextos.includes('grado');
+        const todosTextos = motivos.map(m => m.texto.toLowerCase()).join(' ');
+        const errorGrado = todosTextos.includes('grado');
         const errorTipodoc = todosTextos.includes('tipo de documento') || todosTextos.includes('tipodoc');
-        const errorDuplic  = motivos.some(m => !m.esError);   // duplicado → resaltar identificación
+        const errorDuplic = motivos.some(m => !m.esError);   // duplicado → resaltar identificación
 
-        const bordeGrado   = errorGrado   ? BORDE_ERROR : BORDE_NORMAL;
+        const bordeGrado = errorGrado ? BORDE_ERROR : BORDE_NORMAL;
         const bordeTipodoc = errorTipodoc ? BORDE_ERROR : BORDE_NORMAL;
-        const bordeIdent   = errorDuplic  ? BORDE_ERROR : BORDE_NORMAL;
+        const bordeIdent = errorDuplic ? BORDE_ERROR : BORDE_NORMAL;
 
         const tdocOpts = TIPODOC_OPTS.map(opt =>
             `<option value="${opt}" ${opt === String(orig.tipodoc || '') ? 'selected' : ''}>${opt}</option>`
@@ -2184,8 +2210,8 @@ document.addEventListener('input', e => {
     if (!fila) return;
 
     const origIdent = fila.dataset.origIdent;
-    const campo     = e.target.dataset.campo;
-    const nuevoVal  = e.target.value.trim();
+    const campo = e.target.dataset.campo;
+    const nuevoVal = e.target.value.trim();
 
     const registro = jsonOriginal.find(r => String(r.identificacion) === String(origIdent));
     if (!registro) return;
@@ -2206,7 +2232,7 @@ document.addEventListener('change', e => {
     if (!fila) return;
 
     const origIdent = fila.dataset.origIdent;
-    const nuevoVal  = e.target.value;
+    const nuevoVal = e.target.value;
 
     const registro = jsonOriginal.find(r => String(r.identificacion) === String(origIdent));
     if (!registro) return;
@@ -2229,7 +2255,7 @@ async function revalidarConCambios(schoolId) {
         // Barrido final: captura valores aunque el usuario no haya salido del campo
         document.querySelectorAll('tr[data-orig-ident]').forEach(fila => {
             const origIdent = fila.dataset.origIdent;
-            const registro  = jsonOriginal.find(r => String(r.identificacion) === String(origIdent));
+            const registro = jsonOriginal.find(r => String(r.identificacion) === String(origIdent));
             if (!registro) return;
             fila.querySelectorAll('.conflict-input').forEach(input => {
                 const campo = input.dataset.campo;
@@ -2242,8 +2268,8 @@ async function revalidarConCambios(schoolId) {
         const btnRevalidar = document.querySelector('[onclick^="revalidarConCambios"]');
         if (btnRevalidar) { btnRevalidar.disabled = true; btnRevalidar.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Revalidando...'; }
 
-        const GRADOS_VALIDOS  = ['1','2','3','4','5','6','7','8','9','10','11'];
-        const TIPODOC_VALIDOS = ['C.C','TI','C.E','EXT','PPT'];
+        const GRADOS_VALIDOS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11'];
+        const TIPODOC_VALIDOS = ['C.C', 'TI', 'C.E', 'EXT', 'PPT'];
 
         // 1. Errores de grado
         const errGrado = jsonOriginal
@@ -2259,7 +2285,7 @@ async function revalidarConCambios(schoolId) {
 
         const erroresLocales = [...errGrado, ...errTipodoc];
         const IDsConErrLocal = new Set(erroresLocales.map(r => String(r.identificacion)));
-        const jsonParaRPC    = jsonOriginal.filter(row => !IDsConErrLocal.has(String(row.identificacion)));
+        const jsonParaRPC = jsonOriginal.filter(row => !IDsConErrLocal.has(String(row.identificacion)));
 
         // 3. Duplicados via RPC
         let conflictosRPC = [];
@@ -2301,9 +2327,9 @@ function descargarLogEdiciones() {
         return;
     }
     const blob = new Blob([JSON.stringify(cambiosPendientes, null, 2)], { type: 'application/json' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
     a.download = `log_ediciones_${new Date().toISOString().replace(/[:.]/g, '_')}.json`;
     a.click();
     URL.revokeObjectURL(url);
@@ -2338,7 +2364,7 @@ async function procederConCargaFinal(datosLimpios, schoolId) {
 async function viewDistReports() {
     const { data: res, error } = await _s.rpc('obtener_listado_colegios_global_seguro', { p_admin_id: sess.id });
     const cols = res?.data || [];
-    
+
     let optionsHtml = '<option value="">-- Seleccionar Colegio --</option>';
     if (cols && cols.length > 0) {
         optionsHtml += cols.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
@@ -2632,16 +2658,16 @@ async function viewAcademicDistribution(schoolId, schoolName) {
                 </thead>
                 <tbody>
                     ${desglose.map(g => {
-                        const gruposBreakdown = g.grupos && g.grupos.length > 0
-                            ? g.grupos.map(gr => `
+        const gruposBreakdown = g.grupos && g.grupos.length > 0
+            ? g.grupos.map(gr => `
                                 <div style="display: inline-flex; align-items: center; background: #e0f2fe; color: #0369a1; padding: 6px 12px; border-radius: 20px; font-size: 0.9rem; font-weight: bold; margin: 3px 6px 3px 0; border: 1px solid #bae6fd;">
                                     <span style="opacity: 0.75; margin-right: 4px;">Grupo</span> ${esc(gr.grupo_nombre)}: 
                                     <span style="background: #0369a1; color: white; border-radius: 50%; width: 22px; height: 22px; display: inline-flex; justify-content: center; align-items: center; font-size: 0.75rem; margin-left: 6px; font-weight: 800;">${gr.total_estudiantes_grupo}</span>
                                 </div>
                             `).join('')
-                            : `<span style="color:var(--secondary); font-size:0.9rem; font-style:italic;">Sin grupos creados</span>`;
+            : `<span style="color:var(--secondary); font-size:0.9rem; font-style:italic;">Sin grupos creados</span>`;
 
-                        return `
+        return `
                             <tr style="border-bottom: 1px solid #e2e8f0;">
                                 <td style="padding: 15px; font-size: 1.05rem; font-weight: 700; color: var(--primary);">
                                     <i class="fa-solid fa-graduation-cap" style="color:var(--primary); margin-right:6px; opacity:0.7;"></i> Grado ${esc(g.grado_nombre)}
@@ -2658,7 +2684,7 @@ async function viewAcademicDistribution(schoolId, schoolName) {
                                 </td>
                             </tr>
                         `;
-                    }).join('')}
+    }).join('')}
                 </tbody>
             </table>
         </div>

@@ -115,6 +115,12 @@
       white-space: normal;
     }
 
+    /* Evitar corte de filas de la tabla de clasificación a la mitad */
+    .estudiantes-area-tabla tr {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
     /* SVG charts: tamaño fijo para evitar deformación en print */
     .chart-wrap svg {
       width: 100% !important;

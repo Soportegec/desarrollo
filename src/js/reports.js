@@ -406,9 +406,9 @@ function generateGroupBarsSvg(studentsByArea, population, dominantCode) {
         ${bars}
         <line x1="28" y1="220" x2="28" y2="224" stroke="#718096" stroke-width="1"/>
         <rect x="30" y="248" width="10" height="7" fill="${AREA_COLORS[dominantCode] || '#1A3A5C'}" rx="1"/>
-        <text x="44" y="255" font-size="7" fill="${AREA_COLORS[dominantCode] || '#1A3A5C'}" font-weight="700">Área dominante (${escapeHtml(dominantCode)})</text>
+        <text x="44" y="255" font-size="9" fill="${AREA_COLORS[dominantCode] || '#1A3A5C'}" font-weight="700">Área dominante (${escapeHtml(dominantCode)})</text>
         <rect x="160" y="248" width="10" height="7" fill="#A0B9CF" rx="1"/>
-        <text x="174" y="255" font-size="7" fill="#2D3748">Otras áreas</text>
+        <text x="174" y="255" font-size="9" fill="#2D3748">Otras áreas</text>
     </svg>`;
 }
 
@@ -433,7 +433,7 @@ function generateStudentsByAreaHtml(studentsByArea, dominantAreas) {
             const isDominant = dominantCodes.has(code);
             const rowBg = isDominant ? 'background:var(--azul-palido);' : '';
             const namesHtml = names
-                .map(n => `<span style="display:inline-block; margin:1px 3px; font-size:7.5pt;">${escapeHtml(n)}</span>`)
+                .map(n => `<span style="display:inline-block; margin:0 3px; font-size:7.5pt;">${escapeHtml(n)}</span>`)
                 .join('');
 
             return `<tr style="${rowBg}">
@@ -441,7 +441,7 @@ function generateStudentsByAreaHtml(studentsByArea, dominantAreas) {
                     ${escapeHtml(code)}${isDominant ? ' ★' : ''}
                 </td>
                 <td style="font-size:8pt;">${escapeHtml(getAreaLabel(code))}</td>
-                <td style="font-size:7.5pt; line-height:1.6;">${namesHtml}</td>
+                <td style="font-size:7.5pt; line-height:1.3;">${namesHtml}</td>
                 <td style="text-align:center; font-weight:700; font-size:9pt;">${names.length}</td>
             </tr>`;
         }).join('');
@@ -587,9 +587,11 @@ function generateRecommendationsHtml(dominantCode, areaInfo, riskPercent) {
  * @param {number|string} gradeId    - ID del grado
  * @param {string}        gradeName  - Nombre legible del grado (ej: "Grado 11")
  * @param {string}        schoolName - Nombre del colegio
+ * @param {number|string} groupId    - (opcional) ID del grupo para filtrar. null = grado completo
+ * @param {string}        groupName  - (opcional) Nombre del grupo (ej: "11-A")
  * @returns {Object|null} groupReportData listo para renderTemplate(), o null si no hay datos
  */
-async function buildGroupReportContext(schoolId, gradeId, gradeName, schoolName) {
+async function buildGroupReportContext(schoolId, gradeId, gradeName, schoolName, groupId = null, groupName = null) {
 
     // ── 1. Obtener resultados del grupo ──────────────────────────────────────
     let rawResults = [];
@@ -653,6 +655,18 @@ async function buildGroupReportContext(schoolId, gradeId, gradeName, schoolName)
     }
 
     if (!rawResults.length) return null;
+
+    // ── 1b. Filtrar por grupo si se especificó ────────────────────────────────
+    if (groupId) {
+        const { data: grupoRes } = await _s.rpc('obtener_estudiantes_grupo_seguro', {
+            p_grupo_id: String(groupId)
+        });
+        const idsDelGrupo = new Set(
+            (grupoRes?.data || []).map(e => String(e.id))
+        );
+        rawResults = rawResults.filter(r => idsDelGrupo.has(String(r.id_estudiante)));
+        if (!rawResults.length) return null;
+    }
 
     // ── 2. Calcular métricas de agregación ───────────────────────────────────
     const codes = ['C', 'H', 'A', 'S', 'I', 'D', 'E'];
@@ -724,7 +738,12 @@ async function buildGroupReportContext(schoolId, gradeId, gradeName, schoolName)
 
     // ── 5. Análisis de dominancia ────────────────────────────────────────────
     const sortedAreas = sortResultAreas(groupAverages);
-    const dominantAreas = getDominantAreas(sortedAreas);
+    // ── Moda estadística: dominancia por cantidad de estudiantes clasificados ──
+    // studentsByArea ya contiene el área dominante individual de cada alumno.
+    // Se usa como criterio para determinar el área dominante grupal (moda).
+    const modeScores = Object.fromEntries(codes.map(c => [c, (studentsByArea[c] || []).length]));
+    const sortedModeAreas = sortResultAreas(modeScores);
+    const dominantAreas = getDominantAreas(sortedModeAreas);
     const dominantCode = dominantAreas[0]?.code || 'C';
     const dominantLabels = dominantAreas.map(a => a.label).join(' / ') || 'Sin definir';
     const dominantColor = AREA_COLORS[dominantCode] || '#1A3A5C';
@@ -865,7 +884,8 @@ async function buildGroupReportContext(schoolId, gradeId, gradeName, schoolName)
         // Identidad del informe
         pruebaConfig: { tipo_informe: 'Grupal_chaside_vocacional' },
         institutionName: schoolName || 'Institución',
-        gradeName: gradeName || 'Grado',
+        gradeName: groupName ? `${gradeName} - ${groupName}` : (gradeName || 'Grado'),
+        groupName: groupName || null,
         generatedDate: new Date().toLocaleDateString('es-CO'),
         instrumentName: 'Test CHASIDE – 98 ítems',
         year: new Date().getFullYear(),

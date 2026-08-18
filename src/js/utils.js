@@ -1,6 +1,10 @@
 // ==========================================
 // DESCRIPCIONES Y CARRERAS VOCACIONALES
 // ==========================================
+// COMENTADO TEMPORALMENTE PARA PRUEBA — verificar que reportes leen de tareas_vocacionales en BD
+// Para restaurar: descomentar el bloque completo y eliminar la línea "const AREAS_VOCACIONALES = {};"
+const AREAS_VOCACIONALES = {};
+/*
 const AREAS_VOCACIONALES = {
     "Administrativas y Contables": {
         descripcion: "Te interesan la gestión, organización y los negocios. Tienes habilidades para la administración empresarial, análisis de datos financieros y liderazgo estratégico. Disfrutas trabajando en contextos empresariales y tomando decisiones basadas en información cuantitativa.",
@@ -57,6 +61,7 @@ const AREAS_VOCACIONALES = {
         sector_laboral: "Industria tecnológica, construcción y software."
     }
 };
+*/
 
 function esc(t) {
     const d = document.createElement('div');

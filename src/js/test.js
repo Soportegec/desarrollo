@@ -43,12 +43,12 @@ const RESULT_DOMINANCE_THRESHOLD = 10;
 async function fetchAreaInfos(codes) {
     if (!codes || !codes.length) return [];
     const uniqueCodes = [...new Set(codes.filter(Boolean))];
-    const { data, error } = await _s.from('tareas_vocacionales').select('*').in('codigo_area', uniqueCodes);
+    const { data: res, error } = await _s.rpc('obtener_areas_vocacionales_por_codigos', { p_codigos: uniqueCodes });
     if (error) {
         console.error('Error loading tareas_vocacionales:', error);
         return [];
     }
-    return data || [];
+    return res?.data || [];
 }
 
 async function buildAreaInfo(areaCodes) {
@@ -195,12 +195,25 @@ async function renderInforme(d, funcionVolver) {
             studentName: d.st?.nombre || 'Estudiante',
             studentId: d.st?.identificacion || d.st?.tusuario?.identificacion || 'N/A',
             gradeLabel: d.st?.tgrados?.nombre || 'N/A',
+            grupoLabel: d.st?.tgrupos?.nombre || 'N/A',
             colegioNombre: d.colegioNombre || 'N/A',
             fechaAplicacion: d.fechaActual || new Date().toLocaleDateString(),
             year: new Date().getFullYear()
         };
 
         board.innerHTML = renderTemplate(template, context);
+
+        // Personalizar nombre del archivo PDF con el nombre del estudiante
+        const printBtn = board.querySelector('[onclick="window.print()"]');
+        if (printBtn) {
+            const nombreEstudiante = (context.studentName || 'Informe').replace(/\s+/g, '_');
+            printBtn.onclick = function() {
+                const titleOriginal = document.title;
+                document.title = nombreEstudiante;
+                window.print();
+                document.title = titleOriginal;
+            };
+        }
 
         // Vincular botón de volver si existe en la plantilla
         const backBtn = document.getElementById('reportBackButton');
@@ -494,6 +507,10 @@ async function viewInformesIndividuales(schoolId = null, schoolName = null) {
     const completedSet = new Set(rpcComp?.data?.data || rpcComp?.data || []);
 
     const studentsByGrade = new Map(); (estudiantes || []).forEach(est => { if (!studentsByGrade.has(est.id_grado)) { studentsByGrade.set(est.id_grado, []); } studentsByGrade.get(est.id_grado).push(est); });
+
+    // Guardar en window para acceso desde filtrarEstudiantesPorGrupo sin nueva consulta a BD
+    window._infIndividualData = { studentsByGrade, completedSet };
+
     let content = `<div class="card span-6">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
             <h3>Estudiantes con prueba asignada</h3>
@@ -508,15 +525,165 @@ async function viewInformesIndividuales(schoolId = null, schoolName = null) {
         const completed = filteredStudents.filter(s => completedSet.has(s.id)).length;
         const pending = total - completed;
 
-        const groupDetails = Array.from(gradeEntry.grupos.entries()).map(([groupId, groupName]) => {
-            const groupStudents = gradeStudents.filter(s => s.id_grupo === groupId);
-            if (!groupStudents.length) return '';
-            return `<div style="margin-bottom: 20px;"><h5 style="margin-bottom: 10px; color: var(--primary);">Grupo ${groupName}</h5>${groupStudents.map(st => `<div style="padding: 12px; margin-bottom: 8px; border: 1px solid #e0e0e0; border-radius: 8px; display:flex; justify-content:space-between; align-items:center; background:#fff; ${completedSet.has(st.id) ? 'cursor:pointer;' : ''}" ${completedSet.has(st.id) ? `onclick="viewInformeEstudiante('${st.id}')"` : ''}><div><strong>${st.nombre || 'Sin nombre'}</strong><br><small style="color: var(--secondary);">${st.grado_nombre || st.tgrados?.nombre || 'Sin grado'} - ${st.grupo_nombre || st.tgrupos?.nombre || 'Sin grupo'}</small></div><span style="padding: 4px 10px; border-radius: 999px; font-size:0.8rem; ${completedSet.has(st.id) ? 'background: var(--success); color: white;' : 'background: var(--danger); color: white;'}">${completedSet.has(st.id) ? 'Completado' : 'Pendiente'}</span></div>`).join('')}</div>`;
-        }).join('');
+        const groupOptions = Array.from(gradeEntry.grupos.entries())
+            .map(([gid, gname]) => `<option value="${gid}">${gname}</option>`)
+            .join('');
 
-        content += `<details style="margin-bottom:18px; border:1px solid #d1d5db; border-radius:10px; overflow:hidden; background:#fff;"><summary style="padding:18px 20px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; font-weight:600; background:#f9fafb;"><span>${gradeEntry.nombre} - ${total} asignados / ${completed} completados / ${pending} pendientes</span><span style="font-size:0.9rem; color:var(--secondary);">Ver</span></summary><div style="padding:20px; border-top:1px solid #e5e7eb;">${groupDetails || '<p style="color: var(--secondary);">No hay estudiantes asignados en este grado.</p>'}</div></details>`;
+        content += `<details style="margin-bottom:18px; border:1px solid #d1d5db; border-radius:10px; overflow:hidden; background:#fff;"><summary style="padding:18px 20px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; font-weight:600; background:#f9fafb;"><span>${gradeEntry.nombre} - ${total} asignados / ${completed} completados / ${pending} pendientes</span><span style="font-size:0.9rem; color:var(--secondary);">Ver</span></summary><div style="padding:20px; border-top:1px solid #e5e7eb;"><select onchange="filtrarEstudiantesPorGrupo(this.value, ${gradeId})" style="width:100%; padding:10px; border-radius:8px; border:1px solid #ddd; margin-bottom:15px; font-size:0.95rem;"><option value="">-- Seleccionar Grupo --</option>${groupOptions}</select><div id="students-grade-${gradeId}"></div></div></details>`;
     }
     document.getElementById('dynamicBoard').innerHTML = content + `</div></div>`;
+}
+
+function filtrarEstudiantesPorGrupo(groupId, gradeId) {
+    const container = document.getElementById('students-grade-' + gradeId);
+    if (!container) return;
+    if (!groupId) { container.innerHTML = ''; return; }
+
+    const d = window._infIndividualData || {};
+    const studentsByGrade = d.studentsByGrade;
+    const completedSet = d.completedSet;
+    if (!studentsByGrade) return;
+
+    const gradeStudents = studentsByGrade.get(parseInt(gradeId)) || [];
+    const groupStudents = gradeStudents.filter(function(s) { return s.id_grupo === parseInt(groupId); });
+    const completados = groupStudents.filter(function(s) { return completedSet.has(s.id); });
+
+    if (!groupStudents.length) {
+        container.innerHTML = '<p style="color:var(--secondary);">No hay estudiantes en este grupo.</p>';
+        return;
+    }
+
+    var listHtml = groupStudents.map(function(st) {
+        var done = completedSet.has(st.id);
+        var checkHtml = done
+            ? '<input type="checkbox" class="inf-check" data-id="' + st.id + '" style="width:16px;height:16px;cursor:pointer;margin-right:10px;" onclick="event.stopPropagation()">'
+            : '<input type="checkbox" disabled style="width:16px;height:16px;margin-right:10px;opacity:0.3;">';
+        return '<div style="padding:12px; margin-bottom:8px; border:1px solid #e0e0e0; border-radius:8px; display:flex; align-items:center; background:#fff;' + (done ? ' cursor:pointer;' : '') + '">' +
+            checkHtml +
+            '<div style="flex:1;" ' + (done ? 'onclick="viewInformeEstudiante(\'' + st.id + '\')"' : '') + '>' +
+            '<strong>' + (st.nombre || 'Sin nombre') + '</strong><br>' +
+            '<small style="color:var(--secondary);">' + (st.grado_nombre || 'Sin grado') + ' - ' + (st.grupo_nombre || 'Sin grupo') + '</small>' +
+            '</div>' +
+            '<span style="padding:4px 10px; border-radius:999px; font-size:0.8rem;' + (done ? ' background:var(--success); color:white;' : ' background:var(--danger); color:white;') + '">' + (done ? 'Completado' : 'Pendiente') + '</span>' +
+            '</div>';
+    }).join('');
+
+    var btnHtml = completados.length > 0
+        ? '<div style="display:flex; gap:10px; margin-bottom:12px;">' +
+          '<button class="btn-main" style="width:auto; padding:8px 16px; font-size:0.85rem;" onclick="seleccionarTodosInformes(' + gradeId + ', true)">Seleccionar todos</button>' +
+          '<button class="btn-main" style="width:auto; padding:8px 16px; font-size:0.85rem; background:var(--secondary);" onclick="seleccionarTodosInformes(' + gradeId + ', false)">Deseleccionar</button>' +
+          '<button class="btn-main" style="width:auto; padding:8px 16px; font-size:0.85rem; background:var(--success);" onclick="descargarInformesSeleccionados(' + gradeId + ')"><i class="fa-solid fa-file-zipper"></i> Descargar seleccionados</button>' +
+          '</div>'
+        : '';
+
+    container.innerHTML = btnHtml + listHtml;
+}
+
+function seleccionarTodosInformes(gradeId, marcar) {
+    var checks = document.querySelectorAll('#students-grade-' + gradeId + ' .inf-check');
+    checks.forEach(function(c) { c.checked = marcar; });
+}
+
+async function descargarInformesSeleccionados(gradeId) {
+    var checks = document.querySelectorAll('#students-grade-' + gradeId + ' .inf-check:checked');
+    if (!checks.length) { alert('Selecciona al menos un estudiante.'); return; }
+
+    var ids = Array.from(checks).map(function(c) { return c.dataset.id; });
+    var total = ids.length;
+    var current = 0;
+
+    // Barra de progreso
+    var progDiv = document.createElement('div');
+    progDiv.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#1e3a6e;color:white;padding:12px 20px;font-weight:600;font-size:0.9rem;text-align:center;';
+    progDiv.className = 'btn-print-hide';
+    progDiv.innerHTML = 'Preparando informe 1 de ' + total + '...';
+    document.body.appendChild(progDiv);
+
+    // Guardar estado del board para restaurar al terminar
+    var board = document.getElementById('dynamicBoard');
+    var boardSnapshot = board.innerHTML;
+    var boardHadGrid = board.classList.contains('bento-grid');
+
+    async function imprimirSiguiente() {
+        if (current >= ids.length) {
+            // Restaurar vista original
+            document.body.removeChild(progDiv);
+            board.innerHTML = boardSnapshot;
+            if (boardHadGrid) board.classList.add('bento-grid');
+            alert('✅ Se generaron ' + total + ' informes.');
+            return;
+        }
+
+        var eid = ids[current];
+        progDiv.innerHTML = 'Informe ' + (current + 1) + ' de ' + total + ' — abre el diálogo de impresión...';
+
+        // Obtener datos
+        var resData = await _s.rpc('obtener_mi_resultado_seguro', { p_estudiante_id: eid });
+        var estData = await _s.rpc('obtener_datos_estudiante_seguro', { p_estudiante_id: eid, p_solicitante_id: sess.id });
+
+        if (resData.error || estData.error) {
+            current++;
+            return imprimirSiguiente();
+        }
+
+        var res = resData.data?.data?.data || resData.data?.data || resData.data || {};
+        var st  = estData.data?.data?.data  || estData.data?.data  || estData.data  || {};
+
+        var pruebaConfig = { tipo_respuesta: res.tipo_respuesta, logica_calculo: res.logica_calculo, tipo_informe: res.tipo_informe };
+        var resultados   = JSON.parse(res.respuestas || '{}');
+
+        tipoRespuesta  = pruebaConfig.tipo_respuesta  || tipoRespuesta;
+        logicaCalculo  = pruebaConfig.logica_calculo  || logicaCalculo;
+
+        var reportCtx = await buildReportContext(resultados);
+
+        var d = {
+            st: { ...st, tgrados: { nombre: st.grado_nombre || 'N/A' }, tgrupos: { nombre: st.grupo_nombre || 'N/A' },
+                  tcolegios: { nombre: st.colegio_nombre || 'N/A', tdepartamentos: { nombre: st.departamento_nombre || 'N/A' } } },
+            res, pruebaConfig, resultados,
+            colegioNombre: st.colegio_nombre || 'N/A',
+            departamentoNombre: st.departamento_nombre || 'N/A',
+            fechaActual: new Date().toLocaleDateString('es-ES'),
+            ...reportCtx
+        };
+
+        var tipo = (pruebaConfig.tipo_informe || 'chaside_vocacional').toLowerCase();
+        var tplResp = await fetch(TEMPLATE_PATH + tipo + '.html');
+        if (!tplResp.ok) { current++; return imprimirSiguiente(); }
+        var template = await tplResp.text();
+
+        var context = {
+            ...d,
+            studentName:     st.nombre || 'Estudiante',
+            studentId:       st.identificacion || 'N/A',
+            gradeLabel:      st.grado_nombre || 'N/A',
+            grupoLabel:      st.grupo_nombre || 'N/A',
+            colegioNombre:   st.colegio_nombre || 'N/A',
+            fechaAplicacion: d.fechaActual,
+            year:            new Date().getFullYear()
+        };
+
+        // Renderizar en el board (igual que renderInforme)
+        board.classList.remove('bento-grid');
+        board.innerHTML = renderTemplate(template, context);
+
+        // Nombre del archivo = nombre del estudiante
+        var nombreEstudiante = (context.studentName || 'Informe').replace(/\s+/g, '_');
+        var titleOriginal = document.title;
+        document.title = nombreEstudiante;
+
+        // Al cerrar el diálogo de impresión → pasar al siguiente
+        window.onafterprint = function() {
+            window.onafterprint = null;
+            document.title = titleOriginal;
+            current++;
+            setTimeout(imprimirSiguiente, 500);
+        };
+
+        window.print();
+    }
+
+    imprimirSiguiente();
 }
 
 async function viewInformeEstudiante(eid) {
@@ -610,15 +777,33 @@ async function viewInformesGrupales(schoolId = null, schoolName = null) {
         <div class="card span-6" data-school-name="${escapeHtml(school.nombre)}">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                 <h3>Análisis por Grado</h3>
-                <div style="display:flex; gap:15px; align-items:center;">
-                    <div id="rectorGroupSelectorContainer"></div>
-                    <button class="btn-main" style="width:auto; padding:8px 20px; background:var(--secondary);"
-                        onclick="${volverFn}">Volver</button>
-                </div>
+                <button class="btn-main" style="width:auto; padding:8px 20px; background:var(--secondary);"
+                    onclick="${volverFn}">Volver</button>
             </div>
+
+            <!-- Panel de filtros estático -->
+            <div style="display:flex; flex-wrap:wrap; gap:15px; align-items:flex-end; background:#f8fafc; padding:20px; border-radius:12px; margin-bottom:20px;">
+                <div class="input-box" style="margin:0; flex:1; min-width:160px;">
+                    <label>Grado</label>
+                    <select id="selReportGrade" onchange="cargarGruposDelGrado(${school.id})">
+                        <option value="">— Seleccionar —</option>
+                    </select>
+                </div>
+                <div class="input-box" style="margin:0; flex:1; min-width:160px;">
+                    <label>Grupo</label>
+                    <select id="selReportGroup">
+                        <option value="">Grado completo</option>
+                    </select>
+                </div>
+                <button class="btn-main" style="width:auto; padding:10px 24px; flex-shrink:0;"
+                    onclick="generarReporteConFiltro(${school.id})">
+                    <i class="fa-solid fa-chart-bar"></i> Generar Informe
+                </button>
+            </div>
+
             <div id="groupReportContent">
-                <p style="text-align:center; color:var(--secondary); padding:40px;">
-                    Selecciona un grado para generar el informe.
+                <p style="text-align:center; color:var(--secondary); padding:30px;">
+                    Selecciona un grado y pulsa <strong>Generar Informe</strong>.
                 </p>
             </div>
         </div>`;
@@ -646,26 +831,44 @@ async function viewInformesGrupales(schoolId = null, schoolName = null) {
         .map(g => `<option value="${g.id}">${escapeHtml(g.nombre)}</option>`)
         .join('');
 
-    document.getElementById('rectorGroupSelectorContainer').innerHTML =
-        `<select id="selReportGrade" class="pill-btn"
-            style="width:auto; height:auto; padding:8px 15px;"
-            onchange="loadGroupReportData(${school.id})">
-            <option value="">Seleccionar Grado</option>
-            ${options}
-        </select>`;
+    document.getElementById('selReportGrade').innerHTML =
+        `<option value="">— Seleccionar —</option>${options}`;
 }
 
-async function loadGroupReportData(schoolId) {
+async function cargarGruposDelGrado(schoolId) {
     const sel = document.getElementById('selReportGrade');
     const gradeId = sel?.value;
-    const gradeName = sel?.options[sel.selectedIndex]?.text || 'Grado';
-    const container = document.getElementById('groupReportContent');
-    if (!gradeId) return;
+    const selGroup = document.getElementById('selReportGroup');
+    if (!gradeId) {
+        selGroup.innerHTML = '<option value="">Grado completo</option>';
+        return;
+    }
 
-    // Obtener el nombre del colegio desde el título de la página (ya está seteado por viewInformesGrupales)
-    const schoolName = document.getElementById('pageTitle')?.innerText?.replace('Informes Grupales', '').trim()
-        || document.getElementById('pageDesc')?.innerText?.trim()
-        || 'Institución';
+    const { data: gruposRes } = await _s.rpc('obtener_grupos_grado_seguro', {
+        p_grado_id: String(gradeId),
+        p_colegio_id: String(schoolId)
+    });
+    const grupos = gruposRes?.data?.data || gruposRes?.data || [];
+
+    selGroup.innerHTML = '<option value="">Grado completo</option>' +
+        grupos.map(g => `<option value="${g.id}">${escapeHtml(g.nombre)}</option>`).join('');
+}
+
+async function generarReporteConFiltro(schoolId) {
+    const selGrade = document.getElementById('selReportGrade');
+    const selGroup = document.getElementById('selReportGroup');
+    const gradeId = selGrade?.value;
+    const gradeName = selGrade?.options[selGrade.selectedIndex]?.text || 'Grado';
+    const groupId = selGroup?.value || null;
+    const groupName = groupId ? (selGroup?.options[selGroup.selectedIndex]?.text || null) : null;
+    const container = document.getElementById('groupReportContent');
+
+    if (!gradeId) {
+        alert('Selecciona un grado primero.');
+        return;
+    }
+
+    const schoolName = document.querySelector('[data-school-name]')?.dataset?.schoolName || 'Institución';
 
     container.innerHTML = `<div style="text-align:center; padding:40px; color:var(--secondary);">
         <i class="fa-solid fa-circle-notch fa-spin" style="font-size:2rem; margin-bottom:15px;"></i>
@@ -676,7 +879,9 @@ async function loadGroupReportData(schoolId) {
     const groupData = await buildGroupReportContext(
         schoolId, gradeId, gradeName,
         // Recuperar el nombre del colegio desde el atributo data guardado en el selector
-        sel?.closest('[data-school-name]')?.dataset?.schoolName || schoolName
+        document.querySelector('[data-school-name]')?.dataset?.schoolName || schoolName,
+        groupId || null,
+        groupName || null
     );
 
     if (!groupData) {
@@ -1163,6 +1368,3 @@ async function consultarResultado() {
 
     await renderInforme(datosParaInforme, () => viewStudent());
 }
-
-// escapeHtml movida a reports.js
-// renderTemplate movida a reports.js
