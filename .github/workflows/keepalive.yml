@@ -1,7 +1,7 @@
 # ============================================================
 # Supabase Keep Alive
 # Previene que el proyecto Supabase sea pausado por inactividad.
-# Ejecuta un HEAD mínimo a la API pública cada 4 días.
+# Ejecuta pings a la API pública 2 veces al día.
 # No modifica ningún dato. No requiere credenciales admin.
 # ============================================================
 
@@ -9,15 +9,16 @@ name: Supabase Keep Alive
 
 on:
   schedule:
-    - cron: '0 10 */1 * *'  # Cada 3 días a las 10:00 UTC
-  workflow_dispatch:          # Permite ejecución manual desde GitHub
+    - cron: '0 8 * * *'   # Todos los días a las 8:00 UTC
+    - cron: '0 20 * * *'  # Todos los días a las 20:00 UTC
+  workflow_dispatch:        # Permite ejecución manual desde GitHub
 
 jobs:
   ping:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Ping Supabase API
+      - name: Ping tdepartamentos
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -26,14 +27,62 @@ jobs:
             "${SUPABASE_URL}/rest/v1/tdepartamentos?select=id&limit=1" \
             --header "apikey: ${SUPABASE_ANON_KEY}" \
             --silent \
+            --retry 3 \
+            --retry-delay 5 \
             --output /dev/null \
             --write-out "%{http_code}")
 
-          echo "Supabase HTTP response: ${HTTP_CODE}"
+          echo "Supabase HTTP response (tdepartamentos): ${HTTP_CODE}"
 
           if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -gt 299 ]; then
-            echo "ERROR: Supabase respondio con codigo ${HTTP_CODE}. Revisar si el proyecto esta pausado."
+            echo "ERROR: Supabase respondio con codigo ${HTTP_CODE}."
             exit 1
           fi
 
-          echo "OK: Supabase activo y respondiendo correctamente."
+          echo "OK: tdepartamentos respondiendo correctamente."
+
+      - name: Ping tpruebas
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          HTTP_CODE=$(curl --head \
+            "${SUPABASE_URL}/rest/v1/tpruebas?select=id&limit=1" \
+            --header "apikey: ${SUPABASE_ANON_KEY}" \
+            --silent \
+            --retry 3 \
+            --retry-delay 5 \
+            --output /dev/null \
+            --write-out "%{http_code}")
+
+          echo "Supabase HTTP response (tpruebas): ${HTTP_CODE}"
+
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -gt 299 ]; then
+            echo "ERROR: Supabase respondio con codigo ${HTTP_CODE}."
+            exit 1
+          fi
+
+          echo "OK: tpruebas respondiendo correctamente."
+
+      - name: Ping tgrados
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          HTTP_CODE=$(curl --head \
+            "${SUPABASE_URL}/rest/v1/tgrados?select=id&limit=1" \
+            --header "apikey: ${SUPABASE_ANON_KEY}" \
+            --silent \
+            --retry 3 \
+            --retry-delay 5 \
+            --output /dev/null \
+            --write-out "%{http_code}")
+
+          echo "Supabase HTTP response (tgrados): ${HTTP_CODE}"
+
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -gt 299 ]; then
+            echo "ERROR: Supabase respondio con codigo ${HTTP_CODE}."
+            exit 1
+          fi
+
+          echo "OK: tgrados respondiendo correctamente."
