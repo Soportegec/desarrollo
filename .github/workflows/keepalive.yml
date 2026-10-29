@@ -1,4 +1,4 @@
-# ============================================================
+# ===========================================================
 # Supabase Keep Alive
 # Previene que el proyecto Supabase sea pausado por inactividad.
 # Ejecuta pings a la API pública 2 veces al día.
